@@ -3,29 +3,45 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Image } from 'react-native';
 import { Colors, Typography, Spacing } from '../utils/theme';
 import GradientButton from '../components/GradientButton';
 import { useNavigation } from '@react-navigation/native';
+import { computeMrz } from '../lib/mrz';
+import { renderIdCard } from '../lib/idCard';
 
 export default function CreateDocScreen() {
   const navigation = useNavigation<any>();
   const [docType, setDocType] = useState<'passport' | 'license'>('passport');
   const [isGenerating, setIsGenerating] = useState(false);
   const [fields, setFields] = useState({ fullName: '', dob: '', nationality: '', idNumber: '' });
+  const [cardUri, setCardUri] = useState<string | null>(null);
 
   const update = (key: string, val: string) => setFields((p) => ({ ...p, [key]: val }));
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!fields.fullName || !fields.dob) {
       Alert.alert('Required', 'Name and DOB are required for MRZ generation.');
       return;
     }
     setIsGenerating(true);
-    setTimeout(() => {
+    setCardUri(null);
+    try {
+      const mrzResult = computeMrz(docType, fields.fullName, fields.dob, fields.nationality, fields.idNumber, 'M');
+      const cardPath = await renderIdCard({
+        name: fields.fullName.toUpperCase(),
+        dob: fields.dob,
+        nationality: fields.nationality || 'USA',
+        idNumber: fields.idNumber,
+        mrzLines: mrzResult.lines,
+      });
+      setCardUri(cardPath);
+      Alert.alert('Success', `ID card generated:\n${cardPath}`);
+    } catch (err) {
+      Alert.alert('Error', `Failed to generate document: ${err}`);
+    } finally {
       setIsGenerating(false);
-      Alert.alert('Generated', `${docType.toUpperCase()} created with MRZ (ICAO 9303).`);
-    }, 1500);
+    }
   };
 
   return (
@@ -59,6 +75,13 @@ export default function CreateDocScreen() {
           <Field label="Date of Birth" value={fields.dob} onChange={(v) => update('dob', v)} placeholder="YYYY-MM-DD" />
           <Field label="License Number" value={fields.idNumber} onChange={(v) => update('idNumber', v)} placeholder="DL-1234567" />
         </>
+      )}
+
+      {cardUri && (
+        <View style={styles.cardPreview}>
+          <Text style={styles.cardPreviewLabel}>📸 Generated ID Card</Text>
+          <Image source={{ uri: cardUri }} style={styles.cardImage} resizeMode="contain" />
+        </View>
       )}
 
       <GradientButton
@@ -108,4 +131,7 @@ const styles = StyleSheet.create({
   btn: { marginTop: Spacing.sm },
   backBtn: { padding: Spacing.sm, alignItems: 'center' },
   backText: { ...Typography.caption, color: Colors.textMuted },
+  cardPreview: { alignItems: 'center', marginVertical: Spacing.md },
+  cardPreviewLabel: { ...Typography.caption, color: Colors.textSecondary, marginBottom: Spacing.sm },
+  cardImage: { width: '100%', height: 540, borderRadius: 16, backgroundColor: Colors.cardBg },
 });
