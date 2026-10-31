@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "KYC Bypass Suite",
+    "slug": "kyc-bypass",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#090617",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kycbypass.app"
+    },
+    "android": {
+      "package": "com.kycbypass.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#090617",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "INTERNET"
+      ],
+      "predictiveBackGestureEnabled": false,
+      "backgroundColor": "#090617"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
