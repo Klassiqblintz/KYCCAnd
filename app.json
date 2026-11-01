@@ -30,7 +30,8 @@
         "WRITE_EXTERNAL_STORAGE",
         "ACCESS_NETWORK_STATE",
         "ACCESS_WIFI_STATE",
-        "INTERNET"
+        "INTERNET",
+        "FOREGROUND_SERVICE"
       ],
       "predictiveBackGestureEnabled": false,
       "backgroundColor": "#090617"
@@ -46,6 +47,9 @@
         "projectId": "2780de91-f618-4821-a990-520e2142c472"
       }
     },
-    "owner": "klassiq1975"
+    "owner": "klassiq1975",
+    "plugins": [
+      "react-native-video"
+    ]
   }
 }

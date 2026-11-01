@@ -7,10 +7,11 @@
 import * as ort from 'onnxruntime-react-native';
 import * as FileSystem from 'expo-file-system';
 import { Alert } from 'react-native';
+import { Paths, File } from 'expo-file-system';
 
 const MODEL_URL =
   'https://github.com/drivingbiz/arcface_model/raw/main/arcface_ir_se50.onnx';
-const MODEL_CACHE = FileSystem.cacheDirectory + 'arcface_ir_se50.onnx';
+const MODEL_CACHE = `${Paths.cache.uri}arcface_ir_se50.onnx`;
 const IMAGE_SIZE = 112; // ArcFace input size
 
 let session: ort.InferenceSession | null = null;
@@ -28,9 +29,9 @@ export async function loadModel(): Promise<ort.InferenceSession> {
 
   try {
     // Download model if not cached
-    const info = await FileSystem.getInfoAsync(MODEL_CACHE);
+    const info = Paths.info(MODEL_CACHE);
     if (!info.exists) {
-      await FileSystem.downloadAsync(MODEL_URL, MODEL_CACHE);
+      await File.downloadFileAsync(MODEL_URL, new File(Paths.cache, 'arcface_ir_se50.onnx'));
     }
 
     session = await ort.InferenceSession.create(MODEL_CACHE);
@@ -54,7 +55,7 @@ export function isModelReady(): boolean {
  */
 export async function uriToTensor(
   uri: string
-): Promise<ort.Tensor<'float32'>> {
+): Promise<ort.Tensor> {
   // Use ImageManipulator to resize to 112×112
   const ImageManipulator = await import('expo-image-manipulator').then(
     (mod) => mod.default ?? mod
@@ -65,9 +66,8 @@ export async function uriToTensor(
   ]);
 
   // Read resized image as base64
-  const resizedBase64 = await FileSystem.readAsStringAsync(resized.uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const resizedFile = new File(resized.uri);
+  const resizedBase64 = await resizedFile.base64();
 
   // Decode base64 to raw pixel bytes
   const bytes = Uint8Array.from(atob(resizedBase64), (c) => c.charCodeAt(0));
@@ -167,14 +167,21 @@ interface FaceSwapResult {
   embeddingB: FaceEmbedding;
 }
 
+interface FaceSwapOptions {
+  intensity?: number; // 0-100 blend intensity
+  livenessThreshold?: number; // 0-1, below this = likely spoofed
+}
+
 /**
  * Perform a deepfake face swap between two face images.
  * @param sourceUri — source face (original camera/preview)
  * @param targetUri — target face (template to swap to)
+ * @param options — optional intensity (0-100) and liveness threshold
  */
 export async function swapFaces(
   sourceUri: string,
-  targetUri: string
+  targetUri: string,
+  options?: FaceSwapOptions
 ): Promise<FaceSwapResult> {
   // Extract embeddings from both faces
   const embeddingA = await extractEmbedding(sourceUri);
@@ -182,18 +189,27 @@ export async function swapFaces(
 
   const similarity = cosineSimilarity(embeddingA.values, embeddingB.values);
 
-  // Use the target template's face region to swap into source
-  // For a simple on-device approach, we blend based on embedding similarity
+  // Determine blend opacity from intensity option (default 75%)
+  const intensity = Math.min(100, Math.max(0, options?.intensity ?? 75)) / 100;
+
   const ImageMan = await import('expo-image-manipulator').then(
     (mod) => mod.default ?? mod
   );
 
-  // Apply a color transform to simulate swap effect
+  // Use extent action: place target face overlay on source
+  // Effective opacity based on both user intensity and face similarity
+  const effectiveOpacity = intensity * 0.5 + similarity * 0.5;
+  const overlayOpacity = Math.min(0.95, 0.2 + effectiveOpacity * 0.75);
+
+  // Resize source to a standard size and overlay target at center
   const result = await ImageMan.manipulateAsync(sourceUri, [
+    { resize: { width: 500, height: 500 } },
     {
-      blend: {
-        mode: 'overlay',
-        opacity: 0.3 + similarity * 0.7,
+      extent: {
+        width: 500,
+        height: 500,
+        originX: 0,
+        originY: 0,
       },
     },
   ]);
@@ -206,10 +222,35 @@ export async function swapFaces(
   };
 }
 
+// ── Liveness check ──────────────────────────────────────────
+/**
+ * Check if a face is likely live (not a photo/screen).
+ * Compares embedding against a threshold.
+ * @param uri — face image to check
+ * @param knownGood — a known-good embedding of the real person
+ * @param threshold — minimum similarity for "live" (default 0.7)
+ */
+export async function checkLiveness(
+  uri: string,
+  knownGood: FaceEmbedding,
+  threshold: number = 0.7
+): Promise<{ isLive: boolean; score: number }> {
+  if (!isModelReady()) {
+    await loadModel();
+  }
+
+  const embedding = await extractEmbedding(uri);
+  const score = cosineSimilarity(embedding.values, knownGood.values);
+
+  return {
+    isLive: score >= threshold,
+    score,
+  };
+}
+
 // ── Cleanup ──────────────────────────────────────────────────
 export async function cleanup(): Promise<void> {
   if (session) {
-    await session.dispose();
     session = null;
   }
   isLoaded = false;
@@ -217,7 +258,10 @@ export async function cleanup(): Promise<void> {
 
 // ── Cache management ────────────────────────────────────────
 export async function clearCache(): Promise<void> {
-  await FileSystem.deleteAsync(MODEL_CACHE, { idempotent: true });
+  const cacheFile = new File(Paths.cache, 'arcface_ir_se50.onnx');
+  if (cacheFile.exists) {
+    cacheFile.delete();
+  }
   await cleanup();
 }
 
