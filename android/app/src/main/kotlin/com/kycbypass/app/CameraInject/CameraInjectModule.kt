@@ -3,11 +3,13 @@ package com.kycbypass.app.CameraInject
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
 import android.graphics.PixelFormat
 import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.TotalCaptureResult
 import android.media.ImageReader
 import android.net.Uri
 import android.os.Build
@@ -15,16 +17,12 @@ import android.os.Handler
 import android.os.Looper
 import com.facebook.react.bridge.*
 import java.nio.ByteBuffer
-import kotlin.math.min
 
-/**
- * Native Expo module that injects camera frames into Android's external camera.
- */
 class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     companion object {
         private const val TAG = "CameraInject"
-        private const val IMAGE_FORMAT = 0x01040602 // RGBA_8888
+        private const val IMAGE_FORMAT = PixelFormat.RGBA_8888
         private const val MAX_BUFFER = 2
     }
 
@@ -250,20 +248,20 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
 
             cameraDevice?.createCaptureSession(
                 listOf(imageReaderSurface!!),
-                object : CameraCaptureSession.CaptureCallback() {
+                object : CameraCaptureSession.Callback() {
                     override fun onConfigured(session: CameraCaptureSession) {
                         cameraSession = session
                         session.setRepeatingRequest(captureRequest!!, frameCallback, mainHandler)
                     }
 
                     override fun onConfigureFailed(session: CameraCaptureSession) {
-                        // Session failed to configure
+                        // failed
                     }
                 },
                 mainHandler
             )
         } catch (e: Exception) {
-            // Session creation failed
+            // failed
         }
     }
 
@@ -279,7 +277,6 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
             if (frame != null) {
                 val planes = image.planes
                 val buffer = planes[0].buffer
-                val rowStride = planes[0].rowStride
 
                 val pixelCount = frame.width * frame.height
                 val pixels = IntArray(pixelCount)
@@ -304,12 +301,12 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
         for (id in ids) {
             try {
                 val characteristics = cameraManager!!.getCameraCharacteristics(id)
-                val facing = characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
-                if (facing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_EXTERNAL) {
+                val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                if (facing == CameraCharacteristics.LENS_FACING_EXTERNAL) {
                     return id
                 }
             } catch (e: Exception) {
-                // Skip
+                // skip
             }
         }
         if (ids.isNotEmpty()) return ids[0]
@@ -325,17 +322,26 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
         val elapsed = now - lastFpsUpdate
         if (elapsed < 1000) return currentFps
 
-        val fps = if (elapsed > 0) (fpsCounter * 1000 / elapsed) else 0
+        val fpsValue = fpsCounter * 1000 / elapsed
         fpsCounter = 0
         lastFpsUpdate = now
-        return fps
+        return fpsValue
     }
 
-    private val frameCallback: CameraCaptureSession.CaptureCallback = object : CameraCaptureSession.CaptureCallback() {
+    private val frameCallback = object : CameraCaptureSession.Callback() {
+        override fun onConfigured(session: CameraCaptureSession) {
+            cameraSession = session
+            session.setRepeatingRequest(captureRequest!!, frameCallback, mainHandler)
+        }
+
+        override fun onConfigureFailed(session: CameraCaptureSession) {
+            // failed
+        }
+
         override fun onCaptureCompleted(
             session: CameraCaptureSession,
             request: CaptureRequest,
-            result: android.hardware.camera2.TotalCaptureResult
+            result: TotalCaptureResult
         ) {
             fpsCounter++
             val now = System.currentTimeMillis()
@@ -351,7 +357,7 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
             request: CaptureRequest,
             failure: CameraCaptureSession.CaptureFailure
         ) {
-            // Frame capture failed
+            // failed
         }
     }
 
