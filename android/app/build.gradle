@@ -156,8 +156,7 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-    // ONNX Runtime native library (not auto-linked by Expo)
-    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.24.3"
+    // ONNX Runtime native library is bundled via onnxruntime-react-native package
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
