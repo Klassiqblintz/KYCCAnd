@@ -248,7 +248,7 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
 
             cameraDevice?.createCaptureSession(
                 listOf(imageReaderSurface!!),
-                object : CameraCaptureSession.Callback() {
+                object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
                         cameraSession = session
                         session.setRepeatingRequest(captureRequest!!, frameCallback, mainHandler)
@@ -322,13 +322,13 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
         val elapsed = now - lastFpsUpdate
         if (elapsed < 1000) return currentFps
 
-        val fpsValue = fpsCounter * 1000 / elapsed
+        val fpsValue: Int = (fpsCounter * 1000 / elapsed).toInt()
         fpsCounter = 0
         lastFpsUpdate = now
         return fpsValue
     }
 
-    private val frameCallback = object : CameraCaptureSession.Callback() {
+    private val frameCallback: CameraCaptureSession.CaptureCallback = object : CameraCaptureSession.CaptureCallback() {
         override fun onConfigured(session: CameraCaptureSession) {
             cameraSession = session
             session.setRepeatingRequest(captureRequest!!, frameCallback, mainHandler)
