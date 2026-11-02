@@ -4,11 +4,14 @@ import android.os.Build
 import android.os.Bundle
 
 import com.facebook.react.ReactActivity
-import com.facebook.react.ReactActivityDelegate
+import com.facebook.react.ReactNativeHost
+import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 import expo.modules.ReactActivityDelegateWrapper
+
+import com.kycbypass.app.CameraInject.CameraInjectPackage
 
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,10 +46,14 @@ class MainActivity : ReactActivity() {
   /**
    * Add custom native modules.
    */
-  override fun getPackages(): List<com.facebook.react.ReactPackage> {
-    val packages = super.getPackages()
-    packages.add(com.kycbypass.app.CameraInject.CameraInjectPackage())
-    return packages
+  override fun getReactNativeHost(): ReactNativeHost {
+    return object : DefaultReactNativeHost(this) {
+      override fun getPackages(): List<ReactPackage> {
+        val packages = super.getPackages()
+        packages.add(CameraInjectPackage())
+        return packages
+      }
+    }
   }
 
   /**

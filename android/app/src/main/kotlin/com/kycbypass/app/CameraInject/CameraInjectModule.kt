@@ -2,11 +2,13 @@ package com.kycbypass.app.CameraInject
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.PixelFormat
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -33,7 +35,8 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
     }
 
     private val reactContext: ReactApplicationContext = reactContext
-    private val mainLooper: Looper = Looper.getMainLooper()
+    private val mainExecutor = reactContext.mainExecutor
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // Camera2 components
     private var cameraManager: CameraManager? = null
@@ -50,20 +53,16 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
     private var frameWidth = 1920
     private var frameHeight = 1080
     private var pendingFrame: Bitmap? = null
-    private var pendingFrameLock = Any()
+    private val pendingFrameLock = Any()
     private var lastDequeueTime = 0L
 
     // Frame rate tracking
     private var fpsCounter = 0
-    private var fpsAccumulator = 0L
     private var currentFps = 0
-    private var lastFpsUpdate = 0LL
+    private var lastFpsUpdate = 0L
 
     // Camera ID for external camera
     private var externalCameraId: String? = null
-
-    // Main thread handler for async operations
-    private val handler: Handler = Handler(Looper.getMainLooper())
 
     override fun getName(): String = "CameraInject"
 
@@ -98,7 +97,7 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
             }
 
             // Open external camera
-            cameraManager?.openCamera(externalCameraId!!, cameraCallback, mainLooper)
+            cameraManager?.openCamera(externalCameraId!!, cameraCallback, mainExecutor)
 
             isInjecting = true
             currentFps = fps
@@ -125,28 +124,31 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
             // Convert ReadableArray to byte array
             val bytes = ByteArray(pngData.size())
             for (i in 0 until pngData.size()) {
-                bytes[i] = pngData.getByte(i).toByte()
+                bytes[i] = pngData.getDouble(i).toInt().toByte()
             }
 
             // Decode to bitmap
-            val bitmap = Bitmap.createBitmap(
-                frameWidth, frameHeight, Bitmap.Config.ARGB_8888
-            )
-            bitmap.copyPixelsFromBuffer(
-                ByteBuffer.wrap(bytes).asIntBuffer()
-                    .apply { bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(bytes)) }
-            )
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 
-            // Synchronously update if camera session is ready
-            synchronized(pendingFrameLock) {
-                pendingFrame?.recycle()
-                pendingFrame = bitmap
+            if (bitmap != null) {
+                // Resize to target if needed
+                val resized = if (bitmap.width != frameWidth || bitmap.height != frameHeight) {
+                    Bitmap.createScaledBitmap(bitmap, frameWidth, frameHeight, true)
+                } else {
+                    bitmap
+                }
+
+                // Synchronously update if camera session is ready
+                synchronized(pendingFrameLock) {
+                    pendingFrame?.recycle()
+                    pendingFrame = resized
+                }
+
+                // Signal the camera to dequeue and display
+                dequeueFrameIfNeeded()
             }
 
-            // Signal the camera to dequeue and display
-            dequeueFrameIfNeeded()
-
-            promise.resolve(true)
+            promise.resolve(bitmap != null)
         } catch (e: Exception) {
             promise.reject("FRAME_ERROR", "Failed to inject frame: ${e.message}", e)
         }
@@ -165,13 +167,13 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
         try {
             // Load bitmap from URI
             val contentResolver = reactContext.contentResolver
-            val inputStream = contentResolver.openInputStream(uri)
+            val inputStream = contentResolver.openInputStream(Uri.parse(uri))
             if (inputStream == null) {
                 promise.reject("URI_ERROR", "Cannot open file: $uri")
                 return
             }
 
-            val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+            val originalBitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
 
             if (originalBitmap == null) {
@@ -306,7 +308,7 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
                 set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF)
                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-            } ?: return
+            }?.build() ?: return
 
             // Create capture session with preview surface only
             cameraDevice?.createCaptureSession(
@@ -314,14 +316,14 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
                         cameraSession = session
-                        session.setRepeatingRequest(captureRequest!!, null, mainLooper)
+                        session.setRepeatingRequest(captureRequest!!, frameCallback, mainHandler)
                     }
 
                     override fun onConfigureFailed(session: CameraCaptureSession) {
                         // Session failed to configure
                     }
                 },
-                mainLooper
+                mainHandler
             )
         } catch (e: Exception) {
             // Session creation failed
@@ -335,7 +337,7 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
         if (cameraSession == null || captureRequest == null) return
 
         try {
-            val image = imageReader?.acquireNextImage()
+            val image = imageReader?.acquireLatestImage()
             if (image == null) return
 
             // Get pending frame
@@ -349,7 +351,10 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
                 val buffer = planes[0].buffer
                 val rowStride = planes[0].rowStride
 
-                frame.readPixels(buffer, rowStride)
+                val pixelCount = frame.width * frame.height
+                val pixels = IntArray(pixelCount)
+                frame.getPixels(pixels, 0, frame.width, 0, 0, frame.width, frame.height)
+                buffer.asIntBuffer().put(pixels)
                 buffer.rewind()
 
                 synchronized(pendingFrameLock) {
@@ -411,13 +416,13 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
     private val frameCallback = object : CameraCaptureSession.RepeatingCallback() {
         override fun onCaptureCompleted(
             session: CameraCaptureSession,
-            request: CaptureRequest,
-            result: TotalCaptureResult
+            result: CaptureResult
         ) {
             fpsCounter++
             // Periodically dequeue frames
             val now = System.currentTimeMillis()
-            if (now - lastDequeueTime > (1000 / currentFps).toLong()) {
+            val interval = if (currentFps > 0) 1000 / currentFps else 33
+            if (now - lastDequeueTime > interval.toLong()) {
                 lastDequeueTime = now
                 dequeueFrameIfNeeded()
             }
@@ -425,11 +430,12 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
 
         override fun onCaptureFailed(
             session: CameraCaptureSession,
-            request: CaptureRequest,
             failure: CameraCaptureSession.CaptureFailure
         ) {
             // Frame capture failed
         }
+
+        override operator fun compareTo(other: CameraCaptureSession.RepeatingCallback): Int = 0
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────
