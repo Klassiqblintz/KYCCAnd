@@ -10,6 +10,7 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.TotalCaptureResult
+import android.hardware.camera2.params.CaptureFailure
 import android.media.ImageReader
 import android.net.Uri
 import android.os.Build
@@ -329,15 +330,6 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
     }
 
     private val frameCallback: CameraCaptureSession.CaptureCallback = object : CameraCaptureSession.CaptureCallback() {
-        override fun onConfigured(session: CameraCaptureSession) {
-            cameraSession = session
-            session.setRepeatingRequest(captureRequest!!, frameCallback, mainHandler)
-        }
-
-        override fun onConfigureFailed(session: CameraCaptureSession) {
-            // failed
-        }
-
         override fun onCaptureCompleted(
             session: CameraCaptureSession,
             request: CaptureRequest,
@@ -355,7 +347,7 @@ class CameraInjectModule(reactContext: ReactApplicationContext) : ReactContextBa
         override fun onCaptureFailed(
             session: CameraCaptureSession,
             request: CaptureRequest,
-            failure: CameraCaptureSession.CaptureFailure
+            failure: CaptureFailure
         ) {
             // failed
         }

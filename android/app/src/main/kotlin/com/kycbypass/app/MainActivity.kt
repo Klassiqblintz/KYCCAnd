@@ -25,14 +25,14 @@ class MainActivity : ReactActivity() {
     return ReactActivityDelegateWrapper(
         this,
         BuildConfig.IS_NEW_ARCHITECTURE_ENABLED,
-        object : DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled) {
-            override fun getPackages(): List<ReactPackage> {
-                val packages = super.getPackages()
-                packages.add(CameraInjectPackage())
-                return packages
-            }
-        }
+        DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
     )
+  }
+
+  override fun getPackages(): List<ReactPackage> {
+    val packages = super.getPackages() as ArrayList<ReactPackage>
+    packages.add(CameraInjectPackage())
+    return packages
   }
 
   override fun invokeDefaultOnBackPressed() {
