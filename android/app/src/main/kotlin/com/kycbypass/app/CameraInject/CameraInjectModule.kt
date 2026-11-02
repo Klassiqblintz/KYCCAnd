@@ -4,13 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
-import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CaptureRequest
-import android.hardware.camera2.TotalCaptureResult
-import android.hardware.camera2.params.CaptureFailure
+import android.hardware.camera2.*
 import android.media.ImageReader
 import android.net.Uri
 import android.os.Build
