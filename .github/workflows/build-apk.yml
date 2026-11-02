@@ -29,17 +29,20 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+        run: |
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
         working-directory: android
         env:
           EXPO_USE_COMMUNITY_AUTOLINKING: "1"
 
       - name: Grant gradlew execute permission
         run: chmod +x gradlew
+        working-directory: android
 
       - name: Decode signing key
         run: |
-          echo $SIGNING_KEY_BASE64 | base64 -d > ${{ github.workspace }}/android/app/release.keystore
+          echo $SIGNING_KEY_BASE64 | base64 -d > release.keystore
+        working-directory: android/app
         env:
           SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
 
